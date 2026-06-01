@@ -1,0 +1,8 @@
+artifact_location: file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/mlruns/779684029334331459
+creation_time: 1780006727670
+experiment_id: '779684029334331459'
+last_update_time: 1780006727670
+lifecycle_stage: active
+name: CarbonFootprint_Prediction
+trace_location: null
+workspace: default

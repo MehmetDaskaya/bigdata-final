@@ -1,0 +1,55 @@
+# =============================================================================
+# requirements.txt
+# Carbon Footprint Prediction System — Python Bağımlılıkları
+# =============================================================================
+# Kurulum: pip install -r requirements.txt
+# Not: Spark için JAVA_HOME ve PySpark ayrıca kurulmalıdır.
+# =============================================================================
+
+# --- Apache Kafka Producer/Consumer ---
+kafka-python==2.0.2          # Kafka ile Python arasında köprü kurar
+
+# --- Apache Spark (PySpark) ---
+pyspark==3.5.1               # Dağıtık veri işleme motoru
+
+# --- Veri İşleme ---
+pandas==2.2.2                # DataFrame tabanlı veri manipülasyonu
+numpy==1.26.4                # Sayısal hesaplama
+scipy==1.13.0                # İstatistiksel işlemler
+
+# --- Makine Öğrenimi ---
+xgboost==2.0.3               # Gradient Boosted Trees (hızlı ve güçlü)
+lightgbm==4.3.0              # Alternatif gradient boosting (daha hızlı)
+scikit-learn==1.4.2          # Preprocessing, metrics, RandomForest
+imbalanced-learn==0.12.2     # SMOTE — sınıf dengesizliği giderme
+
+# --- Derin Öğrenme (LSTM) ---
+torch==2.3.0                 # PyTorch — LSTM modeli için
+# CPU-only kurulum için: pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# --- Model Açıklanabilirliği ---
+shap==0.45.0                 # SHAP değerleri ile feature importance
+
+# --- MLflow — Deney Takibi ---
+mlflow==2.13.0               # Model versiyonlama ve metrik kayıt
+
+# --- MongoDB Bağlantısı ---
+pymongo==4.7.1               # MongoDB Python sürücüsü
+motor==3.4.0                 # Asenkron MongoDB (Next.js API için)
+
+# --- Veri İndirme ve HTTP ---
+requests==2.32.2             # HTTP istekleri (dataset indirme)
+tqdm==4.66.2                 # İlerleme çubuğu
+
+# --- Görselleştirme (Notebook'lar için) ---
+matplotlib==3.9.0            # Temel grafik kütüphanesi
+seaborn==0.13.2              # İstatistiksel görselleştirme
+plotly==5.22.0               # İnteraktif grafikler
+
+# --- Jupyter Notebook ---
+jupyter==1.0.0               # EDA notebook'ları için
+ipykernel==6.29.4            # Jupyter kernel
+
+# --- Veri Formatları ---
+openpyxl==3.1.2              # Excel dosyası okuma
+pyarrow==16.0.0              # Parquet dosya formatı (Spark ile uyumlu)

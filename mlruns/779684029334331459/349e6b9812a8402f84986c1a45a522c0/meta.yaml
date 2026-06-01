@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/mlruns/779684029334331459/349e6b9812a8402f84986c1a45a522c0/artifacts
+end_time: 1780006765020
+entry_point_name: ''
+experiment_id: '779684029334331459'
+lifecycle_stage: active
+run_id: 349e6b9812a8402f84986c1a45a522c0
+run_name: XGBoost_Classification
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1780006761418
+status: 3
+tags: []
+user_id: mehmetdaskaya

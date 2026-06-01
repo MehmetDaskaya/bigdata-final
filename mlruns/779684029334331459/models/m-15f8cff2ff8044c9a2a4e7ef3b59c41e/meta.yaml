@@ -1,0 +1,10 @@
+artifact_location: file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/mlruns/779684029334331459/models/m-15f8cff2ff8044c9a2a4e7ef3b59c41e/artifacts
+creation_timestamp: 1780006735586
+experiment_id: '779684029334331459'
+last_updated_timestamp: 1780006739266
+model_id: m-15f8cff2ff8044c9a2a4e7ef3b59c41e
+model_type: null
+name: model
+source_run_id: 97b077000271418ca4545a5eb17c2366
+status: 2
+status_message: null

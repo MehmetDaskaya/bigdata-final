@@ -1,0 +1,194 @@
+# =============================================================================
+# docker-compose.yml
+# Carbon Footprint Prediction System — Full Cluster Simulation
+# =============================================================================
+# Bu dosya, projenin tüm bileşenlerini Docker container'larında çalıştırır:
+#   - Apache Zookeeper:  Kafka'nın koordinasyon servisi
+#   - Apache Kafka:      Gerçek zamanlı veri akışı (Carbon Monitor verileri)
+#   - Spark Master:      Dağıtık işleme koordinatörü
+#   - Spark Worker 1/2:  İşçi node'lar (cluster simülasyonu için 2 adet)
+#   - MongoDB:           İşlenmiş verilerin NoSQL depolama alanı
+#   - Mongo Express:     MongoDB yönetim arayüzü (http://localhost:8081)
+# =============================================================================
+
+version: '3.8'
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # ZOOKEEPER — Kafka'nın metadata ve koordinasyon yöneticisi
+  # Kafka broker'lar kümesi için merkezi uyum servisi görevi görür
+  # ---------------------------------------------------------------------------
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181       # Kafka'nın bağlandığı port
+      ZOOKEEPER_TICK_TIME: 2000         # Temel zaman birimi (ms)
+    ports:
+      - "2181:2181"
+    networks:
+      - bigdata-net
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # KAFKA BROKER — Gerçek zamanlı mesaj kuyruğu sistemi
+  # Carbon Monitor verilerini producer'dan consumer'a ileten merkez
+  # Topic: carbon-emissions-daily
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"           # Uygulama bağlantısı için dış port
+      - "9101:9101"           # JMX monitoring portu
+    environment:
+      KAFKA_BROKER_ID: 1                                     # Bu broker'ın benzersiz ID'si
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'              # Zookeeper bağlantısı
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1              # Tek broker için replikasyon=1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_CONFLUENT_LICENSE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CONFLUENT_BALANCER_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'                # Topic otomatik oluşturulsun
+    networks:
+      - bigdata-net
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # SPARK MASTER — Dağıtık işleme koordinatörü
+  # Worker node'ları yönetir, görev dağıtımını gerçekleştirir
+  # Web UI: http://localhost:8080
+  # ---------------------------------------------------------------------------
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: spark-master
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+    ports:
+      - "8080:8080"   # Spark Master Web UI
+      - "7077:7077"   # Worker'ların bağlandığı port
+    volumes:
+      - ./:/app
+      - spark-data:/opt/spark/work
+    networks:
+      - bigdata-net
+
+  # ---------------------------------------------------------------------------
+  # SPARK WORKER 1 — İlk işçi node
+  # Master'dan görev alır, verileri paralel işler
+  # ---------------------------------------------------------------------------
+  spark-worker-1:
+    image: apache/spark:3.5.1
+    container_name: spark-worker-1
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
+    volumes:
+      - ./:/app
+    networks:
+      - bigdata-net
+
+  # ---------------------------------------------------------------------------
+  # SPARK WORKER 2 — İkinci işçi node
+  # Cluster simülasyonu için 2 worker = gerçek dağıtık ortam gibi davranır
+  # ---------------------------------------------------------------------------
+  spark-worker-2:
+    image: apache/spark:3.5.1
+    container_name: spark-worker-2
+    user: root
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.worker.Worker", "spark://spark-master:7077"]
+    depends_on:
+      - spark-master
+    environment:
+      - SPARK_WORKER_MEMORY=1G
+      - SPARK_WORKER_CORES=2
+    volumes:
+      - ./:/app
+    networks:
+      - bigdata-net
+
+  # ---------------------------------------------------------------------------
+  # MONGODB — Ana NoSQL veritabanı
+  # İşlenmiş emisyon kayıtları ve ML tahminleri burada saklanır
+  # Bağlantı: mongodb://admin:password@localhost:27017
+  # ---------------------------------------------------------------------------
+  mongodb:
+    image: mongo:7.0
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: carbon_footprint     # Varsayılan veritabanı
+    volumes:
+      - mongodb-data:/data/db                     # Veriyi kalıcı olarak saklar
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro  # İlk koleksiyonlar
+    networks:
+      - bigdata-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MONGO EXPRESS — MongoDB web yönetim arayüzü (opsiyonel, demo için faydalı)
+  # Sunum sırasında veritabanındaki kayıtları canlı göstermek için kullanılır
+  # URL: http://localhost:8081
+  # ---------------------------------------------------------------------------
+  mongo-express:
+    image: mongo-express:1.0.2-20
+    container_name: mongo-express
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH: "false"                # Şifresiz erişim (demo kolaylığı)
+    networks:
+      - bigdata-net
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS — Tüm servisler aynı Docker ağında iletişim kurar
+# =============================================================================
+networks:
+  bigdata-net:
+    driver: bridge
+
+# =============================================================================
+# VOLUMES — Kalıcı veri depolama alanları
+# =============================================================================
+volumes:
+  mongodb-data:    # MongoDB'nin veri dizini
+  spark-data:      # Spark'ın geçici işleme alanı

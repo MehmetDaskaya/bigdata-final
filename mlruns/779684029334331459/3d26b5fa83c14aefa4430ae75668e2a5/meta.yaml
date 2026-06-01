@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/mlruns/779684029334331459/3d26b5fa83c14aefa4430ae75668e2a5/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '779684029334331459'
+lifecycle_stage: active
+run_id: 3d26b5fa83c14aefa4430ae75668e2a5
+run_name: XGBoost_Regression
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1780253607979
+status: 1
+tags: []
+user_id: mehmetdaskaya

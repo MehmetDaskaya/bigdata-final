@@ -1,0 +1,106 @@
+{
+  "regression_models": [
+    {
+      "model_type": "XGBoost_Regression",
+      "task": "CO2 Emission Prediction (Ablation)",
+      "mae": 0.040393812600231484,
+      "rmse": 0.10993775024897036,
+      "r2": 0.9653849493523108,
+      "test_samples": 21840
+    },
+    {
+      "model_type": "Naive_Baseline_Yesterday",
+      "task": "CO2 Emission Prediction",
+      "mae": 0.02160129120879121,
+      "rmse": 0.05456391746225558,
+      "r2": 0.991473272826495,
+      "test_samples": 21840
+    },
+    {
+      "model_type": "Moving_Average_Baseline_7d",
+      "task": "CO2 Emission Prediction",
+      "mae": 0.01885292647828362,
+      "rmse": 0.045435100171312325,
+      "r2": 0.9940877299820343,
+      "test_samples": 21840
+    },
+    {
+      "model_type": "XGBoost_Regression",
+      "task": "CO2 Emission Prediction",
+      "mae": 0.040393812600231484,
+      "rmse": 0.10993775024897036,
+      "r2": 0.9653849493523108,
+      "n_estimators_used": 147,
+      "train_samples": 87360,
+      "test_samples": 21840,
+      "sector_errors": {
+        "Aviation": {
+          "mae": 0.005237654508548778,
+          "rmse": 0.007019575162732613,
+          "count": 3640
+        },
+        "Ground Transport": {
+          "mae": 0.1314498308277736,
+          "rmse": 0.23010675319237506,
+          "count": 3640
+        },
+        "Industry": {
+          "mae": 0.01908200752652281,
+          "rmse": 0.03165146691552452,
+          "count": 3640
+        },
+        "Power": {
+          "mae": 0.07654429845314267,
+          "rmse": 0.13570291049810984,
+          "count": 3640
+        },
+        "Residential": {
+          "mae": 0.0064905799809065485,
+          "rmse": 0.008809465785562175,
+          "count": 3640
+        },
+        "Shipping": {
+          "mae": 0.003558504304494504,
+          "rmse": 0.004975873354347147,
+          "count": 3640
+        }
+      },
+      "error_std": 0.10844179645506563
+    },
+    {
+      "model_type": "LSTM_PyTorch",
+      "task": "Time Series Forecasting",
+      "country": "CN",
+      "sector": "Power",
+      "mae": 0.09997677057981491,
+      "rmse": 0.12307361282004302,
+      "r2": 0.8533012270927429,
+      "epochs_run": 3,
+      "seq_len": 30,
+      "horizon": 7,
+      "train_sequences": 1427,
+      "test_sequences": 357
+    }
+  ],
+  "classification_models": [
+    {
+      "model_type": "XGBoost_Classification",
+      "task": "Personal Carbon Footprint Category",
+      "accuracy": 0.854,
+      "precision": 0.8589140062696708,
+      "recall": 0.854,
+      "f1": 0.8555313692645616,
+      "train_samples": 4002,
+      "test_samples": 1000
+    }
+  ],
+  "best_regression": {
+    "model_type": "XGBoost_Regression",
+    "task": "CO2 Emission Prediction (Ablation)",
+    "mae": 0.040393812600231484,
+    "rmse": 0.10993775024897036,
+    "r2": 0.9653849493523108,
+    "test_samples": 21840
+  },
+  "generated_at": "2026-06-01T02:48:48.992959"
+}
