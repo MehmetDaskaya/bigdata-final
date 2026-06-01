@@ -1,251 +1,176 @@
-# Carbon Footprint Prediction System
-## BDA5011 Big Data Analytics — Mehmet Daşkaya (2003445)
+# Territorial CO₂ Emissions Prediction System
+### BDA5011 Big Data Analytics — Final Project
+**Bahçeşehir University, Department of Big Data Analytics and Management**
 
-> **Scalable AI-Driven Carbon Emission Prediction using Apache Kafka, Apache Spark, MongoDB, LSTM, and XGBoost**
+> **A Scalable Big Data Architecture for Territorial CO₂ Emissions Prediction and Personal Carbon Footprint Downstream Classification using Apache Kafka, Apache Spark, MongoDB, PyTorch LSTM, and XGBoost.**
 
 ---
 
-## 📋 Proje Özeti
+## 📋 Project Overview
 
-Bu proje, küresel CO₂ emisyonlarını gerçek zamanlı ve büyük ölçekte tahmin eden bir Big Data sistemidir.
-
-### Mimari Bileşenler
+This project implements a dual-path **Lambda Architecture** designed to ingest, process, and analyze greenhouse gas emissions at scale. The system integrates macroeconomic territorial CO₂ emissions (daily estimates from Carbon Monitor and annual historical inventories from EDGAR) with microeconomic lifestyle indicators (Kaggle lifestyle dataset) to enable multi-scale sustainability monitoring.
 
 ```
 [EDGAR / Carbon Monitor CSV]
-        ↓
-[Kafka Producer] → kafka:9092 → Topic: carbon-emissions-daily
-        ↓
-[Spark Structured Streaming] ←→ [Spark Batch Pipeline]
-        ↓                              ↓
-[MongoDB: emissions_timeseries]  [Parquet Archive]
-        ↓
-[ML Models: LSTM + XGBoost + Spark MLlib RF]
-        ↓
-[Next.js Dashboard: localhost:3000]
+        │
+        ▼ (Simulated Daily Stream)
+[Kafka Producer] ──► kafka:9092 ──► Topic: carbon-emissions-daily
+        │
+        ▼ (10s Micro-Batches)
+[Spark Structured Streaming] ◄───► [Spark Batch Pipeline] (Historical)
+        │                                  │
+        ▼                                  ▼
+[MongoDB Time-Series]              [Parquet Archive]
+  (emissions_timeseries)
+        │
+        ▼ (Model Training & Inference)
+[ML Models: PyTorch LSTM + XGBoost + Spark MLlib RF]
+        │
+        ▼ (API Serving Layer)
+[Next.js Interactive Dashboard: localhost:3000]
 ```
 
 ---
 
-## 🚀 Hızlı Başlangıç
+## 📊 Core Research Findings & ML Evaluation
 
-### Gereksinimler
+All machine learning models are trained strictly under a leak-free evaluation protocol. Target leakage is prevented by shifting rolling windows by 1 day before feature engineering, and classification SMOTE resampling is strictly confined to the training folds.
 
+### Machine Learning & Baseline Comparisons
+Daily emissions time series exhibit high autocorrelation. Including naive persistence baselines is critical to establishing rigorous scientific validity:
+
+| Model / Baseline | Task / Resolution | MAE | RMSE | $R^2$ / F1-Score | Data Scope |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **7-Day Moving Average Baseline** | Daily Baseline Forecasting | **0.0189** | **0.0454** | **`0.9941`** | Carbon Monitor (Global) |
+| **Naive Yesterday Value Baseline** | Daily Baseline Forecasting | **0.0216** | **0.0546** | **`0.9915`** | Carbon Monitor (Global) |
+| **XGBoost Regression** | Daily Emission Prediction | 0.0404 | 0.1099 | **`0.9654`** | Carbon Monitor (Global) |
+| **LSTM (PyTorch)** | Sequence-to-Sequence (7d ahead) | 0.1000 | 0.1231 | **`0.8533`** | Carbon Monitor (CN Power) |
+| **XGBoost Classification** | Downstream Footprint Class | — | — | **`0.8555`** *(F1)* | Kaggle Individual |
+| **Spark MLlib Random Forest** | Distributed Batch Regression | 104.57 | 237.27 | **`0.6644`** | EDGAR (Annual) |
+
+*Note: Autoregressive baselines naturally dominate daily one-step forecasting due to strong temporal persistence. XGBoost remains highly valuable for its cross-country generalization, multivariate explanatory power, SHAP-based interpretability, and live dashboard integration—features that simple persistence cannot provide.*
+
+---
+
+## 🚀 Startup & Execution Guide
+
+### Prerequisites
+* **Docker Desktop** (with Compose enabled)
+* **Python 3.10+**
+* **Node.js 18+**
+
+### Step 1: Orchestrate the Docker Cluster
+Spin up Zookeeper, Kafka, Spark Master, two Spark Workers, MongoDB, and Mongo Express:
 ```bash
-# Zorunlu
-Docker Desktop (https://www.docker.com/products/docker-desktop/)
-Python 3.10+
-Node.js 18+
-
-# Opsiyonel (yerel ML eğitimi için)
-Java 11+ (Spark için)
-```
-
-### Adım 1: Cluster'ı Başlat
-
-```bash
-# Tüm servisleri başlat (Kafka + Spark + MongoDB)
 docker-compose up -d
-
-# Servislerin hazır olmasını bekle (~60 saniye)
+```
+Verify that all containers are healthy:
+```bash
 docker-compose ps
-
-# Beklenen çıktı:
-# kafka         Up    0.0.0.0:9092->9092/tcp
-# spark-master  Up    0.0.0.0:8080->8080/tcp
-# spark-worker-1 Up
-# spark-worker-2 Up
-# mongodb       Up    0.0.0.0:27017->27017/tcp
-# mongo-express Up    0.0.0.0:8081->8081/tcp
 ```
 
-### Adım 2: Python Bağımlılıklarını Kur
-
+### Step 2: Install Python Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-### Adım 3: Verileri İndir/Oluştur
+### Step 3: Run the Ingestion & Processing Layer
+1. **Batch Pipeline**: Execute the batch processing script to load EDGAR inventories into MongoDB and archive Parquet stores:
+   ```bash
+   python processing/spark_batch_pipeline.py
+   ```
+2. **Real-time Kafka Stream**: Launch the Spark Streaming consumer to listen to Kafka and populate the MongoDB time-series collection:
+   ```bash
+   python processing/spark_streaming_pipeline.py
+   ```
+3. **Kafka Producer**: Start the Kafka producer to simulate real-time daily streaming by replaying CSV rows:
+   ```bash
+   python ingestion/kafka_producer.py --speed 0.5
+   ```
 
+### Step 4: Model Training & Evaluation
+Train the regression, sequence, and classification models and output updated visual assets to the `results/` folder:
 ```bash
-# Carbon Monitor, bireysel, araç ve EDGAR verileri oluşturulur
-python data/download_data.py
-```
+# Trains XGBoost, LSTM, and runs diagnostic evaluations
+python ml/run_training.py
 
-### Adım 4: Batch Pipeline Çalıştır
-
-```bash
-# EDGAR ve Carbon Monitor verilerini Spark ile işle
-python processing/spark_batch_pipeline.py
-```
-
-### Adım 5: Kafka Producer Başlat (Real-Time Streaming)
-
-```bash
-# Carbon Monitor verilerini Kafka'ya aktar (1 saniyede 1 mesaj)
-python ingestion/kafka_producer.py
-
-# Hızlı test modu (100 mesaj, gecikme yok)
-python ingestion/kafka_producer.py --batch --rows 100
-
-# Farklı hız
-python ingestion/kafka_producer.py --speed 0.5
-```
-
-### Adım 6: Spark Streaming Consumer Başlat
-
-```bash
-# Kafka'dan okuyup MongoDB'ye yaz
-python processing/spark_streaming_pipeline.py
-```
-
-### Adım 7: ML Modellerini Eğit
-
-```bash
-# Tüm modelleri eğit
-python ml/train_all.py
-
-# Hızlı test (Spark MLlib ve LSTM olmadan)
-python ml/train_all.py --skip-spark --skip-lstm
-
-# Model değerlendirme
+# Generates comparison reports and JSON artifacts for the dashboard
 python ml/evaluate.py
 ```
 
-### Adım 8: Dashboard'u Başlat
-
+### Step 5: Start the Presentation Dashboard
+Run the Next.js frontend application to visualize the findings:
 ```bash
 cd dashboard
 npm run dev
-# → http://localhost:3000
+# Open: http://localhost:3000
 ```
 
 ---
 
-## 🌐 Servis URL'leri
+## 🌐 Component Endpoint Map
 
-| Servis | URL | Açıklama |
-|---|---|---|
-| **Dashboard** | http://localhost:3000 | Next.js ana arayüz |
-| **Spark Master UI** | http://localhost:8080 | Cluster izleme |
-| **Spark App UI** | http://localhost:4040 | Aktif iş izleme |
-| **MongoDB Express** | http://localhost:8081 | Veritabanı yönetimi |
-| **MLflow UI** | http://localhost:5000 | Model tracking |
-| **Kafka** | localhost:9092 | Broker endpoint |
+| Service | Endpoint / Port | Purpose |
+| :--- | :--- | :--- |
+| **Presentation Dashboard** | `http://localhost:3000` | Main frontend interface and charts |
+| **Mongo Express GUI** | `http://localhost:8081` | Database UI (view collections & records live) |
+| **Spark Master UI** | `http://localhost:8080` | Distributed cluster status tracking |
+| **Spark Active Application** | `http://localhost:4040` | Real-time Spark job DAG monitoring |
+| **MongoDB Database** | `localhost:27017` | Serving layer endpoint |
+| **Apache Kafka Broker** | `localhost:9092` | Event streaming ingestion broker |
 
 ---
 
-## 📁 Proje Yapısı
+## 📁 Repository Structure
 
 ```
-BigData/
-├── docker-compose.yml          # Cluster tanımı (Spark + Kafka + MongoDB)
-├── mongo-init.js               # MongoDB koleksiyon başlatıcı
-├── requirements.txt            # Python bağımlılıkları
-├── README.md                   # Bu dosya
+.
+├── docker-compose.yml             # Zookeeper, Kafka, Spark x2, MongoDB, Mongo Express
+├── mongo-init.js                  # Database collection schemas & indexes init
+├── requirements.txt               # Pinned Python dependencies
+├── README.md                      # This startup & findings guide
 │
-├── data/                       # Dataset'ler
-│   ├── download_data.py        # Otomatik veri indirme/oluşturma
-│   ├── carbon_monitor/         # Carbon Monitor CSV'leri
-│   ├── kaggle_individual/      # Bireysel karbon ayak izi
-│   ├── vehicles_co2/           # Araç CO2 dataset'i
-│   └── edgar/                  # EDGAR ülke bazlı emisyon
+├── data/                          # Raw and processed datasets
+│   ├── download_data.py           # Dataset downloader/generator utility
+│   ├── carbon_monitor/            # Daily global CO₂ emissions CSVs
+│   ├── kaggle_individual/         # Individual lifestyle survey CSV
+│   └── edgar/                     # EDGAR country and sector inventories
 │
-├── ingestion/
-│   ├── kafka_producer.py       # Carbon Monitor → Kafka (streaming)
-│   └── batch_loader.py         # Spark ile toplu veri yükleme
+├── ingestion/                     # Streaming ingestion scripts
+│   ├── kafka_producer.py          # Publishes rows to carbon-emissions-daily
+│   └── batch_loader.py            # Custom batch loader with retry policies
 │
-├── processing/
-│   ├── spark_batch_pipeline.py    # Batch ETL + Feature Engineering
-│   └── spark_streaming_pipeline.py # Kafka → Spark Streaming → MongoDB
+├── processing/                    # Spark ETL engine scripts
+│   ├── spark_batch_pipeline.py    # Historical batch processing (writes to MongoDB)
+│   └── spark_streaming_pipeline.py# Spark Structured Streaming from Kafka -> MongoDB
 │
-├── ml/
-│   ├── lstm_model.py           # PyTorch LSTM (zaman serisi)
-│   ├── xgboost_model.py        # XGBoost regresyon + sınıflandırma
-│   ├── spark_mllib_model.py    # Dağıtık Random Forest
-│   ├── train_all.py            # Orkestrasyon + MLflow
-│   └── evaluate.py             # Metrik karşılaştırma ve görselleştirme
+├── ml/                            # Machine learning & modeling codebase
+│   ├── lstm_model.py              # PyTorch LSTM time-series implementation
+│   ├── xgboost_model.py           # Gradient Boosting regression & classification
+│   ├── spark_mllib_model.py       # Spark MLlib distributed Random Forest
+│   ├── run_training.py            # Orchestrator training the ML suite
+│   ├── evaluate.py                # Compiles metrics and saves evaluation charts
+│   └── saved_models/              # Serialized trained model binaries
 │
-├── dashboard/                  # Next.js frontend
+├── dashboard/                     # Next.js interactive frontend
 │   ├── app/
-│   │   ├── page.tsx            # Ana dashboard
-│   │   ├── layout.tsx          # Root layout
-│   │   ├── globals.css         # Design system
+│   │   ├── page.tsx               # Recharts-powered visualizer and KPI tabs
 │   │   └── api/
-│   │       ├── emissions/      # Emisyon verileri API
-│   │       └── predictions/    # ML tahminleri API
+│   │       ├── emissions/         # Serving route for database records
+│   │       └── predictions/       # Serving route for predictions
 │   └── package.json
 │
-├── notebooks/                  # Jupyter EDA notebook'ları
-│   ├── 01_EDA.ipynb
-│   ├── 02_Preprocessing.ipynb
-│   └── 03_Model_Evaluation.ipynb
+├── notebooks/                     # Exploratory Data Analysis & Verification
+│   ├── 01_EDA.ipynb               # Dataset visualization and profiles
+│   ├── 02_Preprocessing.ipynb     # Outlier engineering & temporal encoding
+│   └── 03_Model_Evaluation.ipynb  # Comparative metrics and SHAP value study
 │
-├── results/                    # Eğitim sonuçları
-│   ├── regression_comparison.png
-│   ├── classification_metrics.png
-│   └── model_evaluation_report.txt
-│
-└── ml/saved_models/            # Eğitilmiş model dosyaları
-    ├── xgboost_regression.json
-    ├── xgboost_classification.json
-    └── lstm_best_CN_Power.pt
+└── results/                       # Standardized evaluation outputs
+    ├── regression_comparison.png  # Error metric bars
+    ├── classification_metrics.png # Classifier performance bars
+    ├── r2_comparison.png          # horizontal R² comparative chart
+    └── model_evaluation_report.txt# Text execution report
 ```
 
 ---
-
-## 📊 Kullanılan Dataset'ler
-
-| Dataset | Kaynak | Boyut | Rol |
-|---|---|---|---|
-| **Carbon Monitor** | https://carbonmonitor.org/ | ~30MB | Streaming + kısa dönem tahmin |
-| **EDGAR** | https://edgar.jrc.ec.europa.eu/ | ~5MB (örnek) | Uzun dönem tarihsel analiz |
-| **Kaggle Individual** | https://www.kaggle.com/datasets/dumanmesut/individual-carbon-footprint-calculation | ~1MB | Sınıflandırma görevi |
-| **Vehicle CO2** | https://www.kaggle.com/datasets/debajyotipodder/co2-emission-by-vehicles | ~1MB | Ulaşım sektörü regresyonu |
-
----
-
-## 🤖 ML Model Performans Özeti
-
-| Model | Görev | MAE | RMSE | R² / F1 |
-|---|---|---|---|---|
-| **LSTM (PyTorch)** | 7 günlük CO₂ tahmini | 0.0312 | 0.0487 | R²=0.892 |
-| **XGBoost Reg.** | Günlük emisyon tahmini | 0.0421 | 0.0634 | R²=0.834 |
-| **Spark MLlib RF** | EDGAR dağıtık tahmin | 45.23 | 72.81 | R²=0.789 |
-| **XGBoost Clf.** | Bireysel kategori | — | — | F1=0.870 |
-
----
-
-## ⭐ Ekstra Puan Özellikleri
-
-1. **Kafka Streaming**: Carbon Monitor CSV → Kafka Producer → Spark Structured Streaming → MongoDB
-2. **Simüle Edilmiş Cluster**: Docker Compose ile 1 Spark Master + 2 Spark Worker + Kafka + MongoDB
-3. **Lambda Mimarisi**: Batch Layer (EDGAR) + Speed Layer (Kafka Streaming) + Serving Layer (MongoDB)
-4. **MLflow**: Model versiyonlama ve deney takibi
-5. **SHAP**: XGBoost model açıklanabilirliği
-6. **SMOTE**: Sınıf dengesizliği giderme
-
----
-
-## 🎤 Sunum Senaryosu (20 dk)
-
-1. **Dashboard aç** → http://localhost:3000 (2 dk)
-2. **Kafka Producer terminalde** → `python ingestion/kafka_producer.py --speed 0.5`
-3. **Stream tabına geç** → Canlı mesaj akışını göster (3 dk)
-4. **Spark UI aç** → http://localhost:8080 — worker'ları göster (2 dk)
-5. **Mongo Express** → http://localhost:8081 — verilerin geldiğini göster (2 dk)
-6. **Model tabı** → Metrik tablosu ve karşılaştırma (3 dk)
-7. **MLflow UI** → `mlflow ui` → http://localhost:5000 (2 dk)
-
----
-
-## 📚 Kaynaklar
-
-- Liu, Z. et al. (2020). Carbon Monitor. *Scientific Data*, 7(1), 392.
-- Crippa, M. et al. EDGAR Database. European Commission JRC.
-- Shi, H. et al. (2018). Deep Learning for Household Load Forecasting. *IEEE Transactions on Smart Grid*.
-- MongoDB Time Series Collections: https://www.mongodb.com/docs/manual/core/timeseries-collections/
-
----
-
 *BDA5011 Big Data Analytics · Bahçeşehir University · 2026*
