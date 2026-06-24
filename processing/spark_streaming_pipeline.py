@@ -87,6 +87,7 @@ def create_spark_session() -> SparkSession:
         # Streaming performance configurations
         .config("spark.sql.shuffle.partitions", "4")        # Low partition size for streaming
         .config("spark.streaming.stopGracefullyOnShutdown", "true")  # Graceful shutdown
+        .config("spark.sql.legacy.timeParserPolicy", "LEGACY")
         .getOrCreate()
     )
     

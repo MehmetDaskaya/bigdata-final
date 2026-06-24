@@ -9,8 +9,7 @@
 # HOW IT WORKS:
 #   1. Reads the Carbon Monitor CSV (sorted chronologically)
 #   2. Publishes each row as a Kafka message to 'carbon-emissions-daily' topic
-#   3. Pauses briefly between messages for real-time simulation
-#   4. Allows the Spark Structured Streaming consumer to ingest real-time data
+#   3. Allows the Spark Structured Streaming consumer to ingest real-time data
 #
 # PLACE IN BIG DATA ARCHITECTURE:
 #   Data Sources → [KAFKA PRODUCER] → Kafka Topic → Spark Streaming → MongoDB
@@ -167,7 +166,6 @@ def record_to_message(row: pd.Series) -> dict:
 def stream_data(producer: KafkaProducer, df: pd.DataFrame, delay: float, batch_mode: bool = False):
     """
     Sends records in DataFrame to Kafka topic.
-    Key for presentation: This function simulates a real-time data stream.
     In production, real-time data is fetched from the Carbon Monitor API.
     
     Args:

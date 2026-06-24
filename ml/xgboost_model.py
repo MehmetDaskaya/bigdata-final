@@ -43,6 +43,52 @@ DATA_DIR   = BASE_DIR / "data"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+
+
+class MongoProgressCallback(xgb.callback.TrainingCallback):
+    def __init__(self, model_name, total_epochs):
+        self.model_name = model_name
+        self.total_epochs = total_epochs
+        
+    def after_iteration(self, model, epoch, evals_log):
+        train_key = list(evals_log.keys())[0] if len(evals_log) > 0 else None
+        val_key = list(evals_log.keys())[1] if len(evals_log) > 1 else None
+        
+        train_losses = []
+        val_losses = []
+        
+        if train_key:
+            metric_name = list(evals_log[train_key].keys())[0]
+            train_losses = [float(x) for x in evals_log[train_key][metric_name]]
+        if val_key:
+            metric_name = list(evals_log[val_key].keys())[0]
+            val_losses = [float(x) for x in evals_log[val_key][metric_name]]
+            
+        current_loss = train_losses[-1] if train_losses else None
+        current_val_loss = val_losses[-1] if val_losses else None
+        
+        if epoch % 5 == 0 or epoch == self.total_epochs - 1:
+            try:
+                from ml.training_logger import update_status
+                msg = f"Iteration {epoch + 1}/{self.total_epochs} | Loss: {current_loss:.4f}"
+                if current_val_loss is not None:
+                    msg += f" | Val Loss: {current_val_loss:.4f}"
+                update_status(
+                    model_type=self.model_name,
+                    status="running",
+                    epoch=epoch + 1,
+                    total_epochs=self.total_epochs,
+                    train_losses=train_losses,
+                    val_losses=val_losses,
+                    current_loss=current_loss,
+                    current_val_loss=current_val_loss,
+                    message=msg
+                )
+            except Exception:
+                pass
+        return False
+
+
 # =============================================================================
 # TASK 1: REGRESSION — Sectoral CO2 Emission Prediction
 # =============================================================================
@@ -134,12 +180,14 @@ def train_regression_model(df: pd.DataFrame) -> Dict[str, Any]:
         'early_stopping_rounds': 50    # v2.x: defined in constructor
     }
     
+    cb = MongoProgressCallback("XGBoost Regressor", params['n_estimators'])
+    params['callbacks'] = [cb]
     model = xgb.XGBRegressor(**params)
     
     # Train with early stopping
     model.fit(
         X_train, y_train,
-        eval_set=[(X_test, y_test)],
+        eval_set=[(X_train, y_train), (X_test, y_test)],
         verbose=100                    # Report every 100 trees
     )
     
@@ -313,11 +361,13 @@ def train_classification_model(individual_csv: Optional[str] = None) -> Dict[str
         'early_stopping_rounds': 30,              # v2.x: defined in constructor
     }
     
+    cb = MongoProgressCallback("XGBoost Classifier", clf_params['n_estimators'])
+    clf_params['callbacks'] = [cb]
     clf = xgb.XGBClassifier(**clf_params)
     
     clf.fit(
         X_train_balanced, y_train_balanced,
-        eval_set=[(X_test, y_test)],
+        eval_set=[(X_train_balanced, y_train_balanced), (X_test, y_test)],
         verbose=False
     )
     

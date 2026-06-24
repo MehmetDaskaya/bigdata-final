@@ -21,7 +21,16 @@
 # =============================================================================
 
 import os
+# Configure threading limits to prevent OpenMP duplicate/initialization segfaults on macOS
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
 import json
 import time
 import logging
@@ -36,8 +45,20 @@ import mlflow.xgboost
 import mlflow.pytorch
 import mlflow.sklearn
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+# Force root logger level and configure handlers to bypass library overrides
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)
+# Clear any existing handlers to prevent duplicates or silent logs
+for h in list(root_logger.handlers):
+    root_logger.removeHandler(h)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.INFO)
+handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+root_logger.addHandler(handler)
+
 logger = logging.getLogger('train_all')
+logger.setLevel(logging.INFO)
+
 
 BASE_DIR   = Path(__file__).parent.parent
 DATA_DIR   = BASE_DIR / "data"
@@ -253,6 +274,8 @@ def main():
                         help='Country for LSTM and XGBoost (default: CN)')
     parser.add_argument('--sector', default='Power',
                         help='Sector for LSTM (default: Power)')
+    parser.add_argument('--model', default='all', choices=['all', 'xgboost_reg', 'xgboost_clf', 'lstm', 'spark_rf'],
+                        help='Specific model to train (default: all)')
     args = parser.parse_args()
     
     logger.info("=" * 65)
@@ -263,6 +286,14 @@ def main():
     # Initialize MLflow
     setup_mlflow()
     
+    # Import training logger
+    try:
+        from ml.training_logger import update_status
+        update_status("Orchestrator", "running", message="ML Training process initiated. Loading dataset...")
+    except Exception as e:
+        logger.warning(f"Could not import/use training logger: {e}")
+        update_status = None
+        
     # Load data
     df = load_carbon_monitor_data()
     
@@ -272,72 +303,86 @@ def main():
     # =========================================================================
     # MODEL 1: XGBoost Regression
     # =========================================================================
-    logger.info("\n[1/4] XGBoost Regression Model...")
-    
-    try:
-        from ml.xgboost_model import train_regression_model
+    if args.model in ['all', 'xgboost_reg']:
+        logger.info("\n[1/4] XGBoost Regression Model...")
+        if update_status:
+            update_status("XGBoost Regressor", "running", message="Training XGBoost Regression model...")
         
-        with mlflow.start_run(run_name="XGBoost_Regression"):
-            xgb_reg_results = train_regression_model(df)
+        try:
+            from ml.xgboost_model import train_regression_model
             
-            if xgb_reg_results:
-                metrics = xgb_reg_results['metrics']
+            with mlflow.start_run(run_name="XGBoost_Regression"):
+                xgb_reg_results = train_regression_model(df)
                 
-                # Log to MLflow
-                mlflow.log_metrics({
-                    "mae":  metrics['mae'],
-                    "rmse": metrics['rmse'],
-                    "r2":   metrics['r2']
-                })
-                mlflow.log_params({
-                    "model":          "XGBoost",
-                    "task":           "regression",
-                    "n_estimators":   500,
-                    "learning_rate":  0.05
-                })
-                mlflow.xgboost.log_model(xgb_reg_results['model'], "model")
-                
-                all_metrics.append(metrics)
-                logger.info(f"✓ XGBoost Regression: MAE={metrics['mae']:.4f}, R²={metrics['r2']:.4f}")
-    except Exception as e:
-        logger.error(f"XGBoost Regression error: {e}")
+                if xgb_reg_results:
+                    metrics = xgb_reg_results['metrics']
+                    
+                    # Log to MLflow
+                    mlflow.log_metrics({
+                        "mae":  metrics['mae'],
+                        "rmse": metrics['rmse'],
+                        "r2":   metrics['r2']
+                    })
+                    mlflow.log_params({
+                        "model":          "XGBoost",
+                        "task":           "regression",
+                        "n_estimators":   500,
+                        "learning_rate":  0.05
+                    })
+                    mlflow.xgboost.log_model(xgb_reg_results['model'], "model")
+                    
+                    all_metrics.append(metrics)
+                    logger.info(f"✓ XGBoost Regression: MAE={metrics['mae']:.4f}, R²={metrics['r2']:.4f}")
+                    if update_status:
+                        update_status("XGBoost Regressor", "completed", message=f"XGBoost Regression completed. R² = {metrics['r2']:.4f}")
+        except Exception as e:
+            logger.error(f"XGBoost Regression error: {e}")
+            if update_status:
+                update_status("XGBoost Regressor", "failed", error=str(e))
     
     # =========================================================================
     # MODEL 2: XGBoost Classification
     # =========================================================================
-    logger.info("\n[2/4] XGBoost Classification Model...")
-    
-    try:
-        from ml.xgboost_model import train_classification_model
+    if args.model in ['all', 'xgboost_clf']:
+        logger.info("\n[2/4] XGBoost Classification Model...")
+        if update_status:
+            update_status("XGBoost Classifier", "running", message="Training XGBoost Classification model...")
         
-        with mlflow.start_run(run_name="XGBoost_Classification"):
-            xgb_clf_results = train_classification_model()
+        try:
+            from ml.xgboost_model import train_classification_model
             
-            if xgb_clf_results:
-                metrics = xgb_clf_results['metrics']
+            with mlflow.start_run(run_name="XGBoost_Classification"):
+                xgb_clf_results = train_classification_model()
                 
-                mlflow.log_metrics({
-                    "accuracy":  metrics['accuracy'],
-                    "precision": metrics['precision'],
-                    "recall":    metrics['recall'],
-                    "f1":        metrics['f1']
-                })
-                mlflow.log_params({
-                    "model": "XGBoost",
-                    "task":  "classification",
-                    "n_classes": 3
-                })
-                mlflow.xgboost.log_model(xgb_clf_results['model'], "model")
-                
-                all_metrics.append(metrics)
-                logger.info(f"✓ XGBoost Classification: Acc={metrics['accuracy']:.4f}, F1={metrics['f1']:.4f}")
-    except Exception as e:
-        logger.error(f"XGBoost Classification error: {e}")
+                if xgb_clf_results:
+                    metrics = xgb_clf_results['metrics']
+                    
+                    mlflow.log_metrics({
+                        "accuracy":  metrics['accuracy'],
+                        "precision": metrics['precision'],
+                        "recall":    metrics['recall'],
+                        "f1":        metrics['f1']
+                    })
+                    mlflow.log_params({
+                        "model": "XGBoost",
+                        "task":  "classification",
+                        "n_classes": 3
+                    })
+                    mlflow.xgboost.log_model(xgb_clf_results['model'], "model")
+                    
+                    all_metrics.append(metrics)
+                    logger.info(f"✓ XGBoost Classification: Acc={metrics['accuracy']:.4f}, F1={metrics['f1']:.4f}")
+                    if update_status:
+                        update_status("XGBoost Classifier", "completed", message=f"XGBoost Classification completed. F1 = {metrics['f1']:.4f}")
+        except Exception as e:
+            logger.error(f"XGBoost Classification error: {e}")
+            if update_status:
+                update_status("XGBoost Classifier", "failed", error=str(e))
     
     # =========================================================================
     # MODEL 3: LSTM
     # =========================================================================
-    if not args.skip_lstm:
+    if args.model in ['all', 'lstm'] and not args.skip_lstm:
         logger.info(f"\n[3/4] LSTM Model ({args.country}/{args.sector})...")
         
         try:
@@ -374,14 +419,19 @@ def main():
                     logger.info(f"✓ LSTM: MAE={metrics['mae']:.4f}, R²={metrics['r2']:.4f}")
         except Exception as e:
             logger.error(f"LSTM error: {e}")
+            if update_status:
+                update_status("LSTM (PyTorch)", "failed", error=str(e))
     else:
-        logger.info("\n[3/4] LSTM skipped (--skip-lstm flag)")
+        if args.skip_lstm:
+            logger.info("\n[3/4] LSTM skipped (--skip-lstm flag)")
     
     # =========================================================================
     # MODEL 4: Spark MLlib Random Forest
     # =========================================================================
-    if not args.skip_spark:
+    if args.model in ['all', 'spark_rf'] and not args.skip_spark:
         logger.info("\n[4/4] Spark MLlib Random Forest...")
+        if update_status:
+            update_status("Spark MLlib RF", "running", message="Training Spark MLlib Random Forest...")
         
         try:
             from ml.spark_mllib_model import train_distributed_random_forest, create_spark_session
@@ -407,12 +457,17 @@ def main():
                     
                     all_metrics.append(metrics)
                     logger.info(f"✓ Spark RF: MAE={metrics['mae']:.4f}, R²={metrics['r2']:.4f}")
+                    if update_status:
+                        update_status("Spark MLlib RF", "completed", message=f"Spark MLlib Random Forest completed. R² = {metrics['r2']:.4f}")
             
             spark.stop()
         except Exception as e:
             logger.error(f"Spark MLlib error: {e}")
+            if update_status:
+                update_status("Spark MLlib RF", "failed", error=str(e))
     else:
-        logger.info("\n[4/4] Spark MLlib skipped (--skip-spark flag)")
+        if args.skip_spark:
+            logger.info("\n[4/4] Spark MLlib skipped (--skip-spark flag)")
     
     # =========================================================================
     # FINAL REPORT
@@ -434,6 +489,9 @@ def main():
     logger.info(f"MLflow UI: mlflow ui --backend-store-uri {MLFLOW_TRACKING}")
     logger.info(f"           → http://localhost:5000")
     logger.info("=" * 65)
+    
+    if update_status:
+        update_status("Orchestrator", "completed", message=f"Training workflow completed in {total_time:.1f} seconds.")
 
 
 if __name__ == "__main__":

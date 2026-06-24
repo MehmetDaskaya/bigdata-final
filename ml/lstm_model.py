@@ -266,6 +266,13 @@ def train_lstm(df: pd.DataFrame, country: str = "CN", sector: str = "Power",
     logger.info(f"LSTM Training: {country} / {sector}")
     logger.info(f"{'='*50}")
     
+    # Try logging start
+    try:
+        from ml.training_logger import update_status
+        update_status("LSTM (PyTorch)", "running", epoch=0, total_epochs=epochs, message="Initializing LSTM training features...")
+    except Exception as e:
+        logger.warning(f"Could not log start of LSTM training: {e}")
+        
     # Use GPU if available, otherwise CPU
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Device: {device}")
@@ -317,7 +324,7 @@ def train_lstm(df: pd.DataFrame, country: str = "CN", sector: str = "Power",
     )
     # Learning rate scheduler — reduce learning rate (on plateau)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, patience=5, factor=0.5, verbose=True
+        optimizer, patience=5, factor=0.5
     )
     
     # === TRAINING LOOP ===
@@ -373,6 +380,24 @@ def train_lstm(df: pd.DataFrame, country: str = "CN", sector: str = "Power",
             logger.info(f"Epoch [{epoch:3d}/{epochs}] | "
                         f"Train Loss: {avg_train_loss:.6f} | "
                         f"Val Loss: {avg_val_loss:.6f}")
+            
+        # Log epoch progress to MongoDB
+        try:
+            from ml.training_logger import update_status
+            msg = f"Epoch {epoch}/{epochs} | Train Loss: {avg_train_loss:.6f} | Val Loss: {avg_val_loss:.6f}"
+            update_status(
+                "LSTM (PyTorch)",
+                "running",
+                epoch=epoch,
+                total_epochs=epochs,
+                train_losses=train_losses,
+                val_losses=val_losses,
+                current_loss=avg_train_loss,
+                current_val_loss=avg_val_loss,
+                message=msg
+            )
+        except Exception:
+            pass
         
         # Save the best model
         if avg_val_loss < best_val_loss:
@@ -384,6 +409,21 @@ def train_lstm(df: pd.DataFrame, country: str = "CN", sector: str = "Power",
             patience_counter += 1
             if patience_counter >= EARLY_STOP_PATIENCE:
                 logger.info(f"Early stopping at epoch {epoch} (patience={EARLY_STOP_PATIENCE})")
+                try:
+                    from ml.training_logger import update_status
+                    update_status(
+                        "LSTM (PyTorch)",
+                        "running",
+                        epoch=epoch,
+                        total_epochs=epochs,
+                        train_losses=train_losses,
+                        val_losses=val_losses,
+                        current_loss=avg_train_loss,
+                        current_val_loss=avg_val_loss,
+                        message=f"Early stopping triggered at epoch {epoch}."
+                    )
+                except Exception:
+                    pass
                 break
     
     # === TEST EVALUATION ===
@@ -421,6 +461,22 @@ def train_lstm(df: pd.DataFrame, country: str = "CN", sector: str = "Power",
     logger.info(f"  R²   (R-squared Score):           {r2:.4f}")
     logger.info(f"{'='*50}")
     
+    try:
+        from ml.training_logger import update_status
+        update_status(
+            "LSTM (PyTorch)",
+            "completed",
+            epoch=len(train_losses),
+            total_epochs=epochs,
+            train_losses=train_losses,
+            val_losses=val_losses,
+            current_loss=train_losses[-1] if train_losses else None,
+            current_val_loss=val_losses[-1] if val_losses else None,
+            message=f"LSTM training completed successfully. Test metrics: R2 = {r2:.4f}, MAE = {mae:.6f}"
+        )
+    except Exception:
+        pass
+        
     return {
         "model":        model,
         "scaler":       scaler,

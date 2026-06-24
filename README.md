@@ -52,6 +52,78 @@ Daily emissions time series exhibit high autocorrelation. Including naive persis
 
 ---
 
+## 🛠️ Required Libraries & Dependencies
+
+This project relies on multiple ecosystem layers: Infrastructure (Docker), Data Processing (Python), and Frontend (Next.js Node).
+
+### 1. Infrastructure Services (Docker)
+These are fully configured in the [docker-compose.yml](file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/docker-compose.yml):
+* **Apache Kafka** (`kafka:9092`): Real-time daily event message broker.
+* **Apache Spark** (`spark-master:8080`, plus 2 worker nodes): Distributed batch and stream processing engine.
+* **MongoDB** (`mongodb:27017`): Document database serving as the query and time-series serving layer.
+* **Mongo Express** (`localhost:8081`): Database GUI.
+* **Zookeeper**: Kafka coordination container.
+
+### 2. Python Libraries
+All packages are pinned in [requirements.txt](file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/requirements.txt):
+* **pyspark** (v3.5.1): PySpark distributed computation API.
+* **kafka-python** (v2.0.2): Kafka Producer/Consumer messaging interface.
+* **pymongo** (v4.7.1) & **motor** (v3.4.0): Sync and async MongoDB driver.
+* **xgboost** (v2.0.3) & **lightgbm** (v4.3.0): High-performance gradient boosted decision trees.
+* **scikit-learn** (v1.4.2) & **imbalanced-learn** (v0.12.2): ML metrics, model validation, and SMOTE resampling.
+* **torch** (v2.3.0): PyTorch deep learning framework for the LSTM model.
+* **mlflow** (v2.13.0): Experiment tracking, parameter and metrics logging dashboard.
+* **shap** (v0.45.0): SHAP value model explainability.
+* **pandas**, **numpy**, **scipy**, **pyarrow**: Scientific computing, data manipulation, and Parquet formatting.
+
+### 3. Frontend & Dashboard Dependencies (Node.js)
+Located in [package.json](file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/dashboard/package.json):
+* **next** (v16.2.6): Next.js React-based application framework.
+* **react** & **react-dom** (v19.2.4): UI runtime libraries.
+* **recharts** (v3.8.1): Dynamic data visualization components.
+* **mongodb** (v7.2.0): Node database connection driver.
+* **lucide-react** (v1.17.0): Vector outline icon library.
+
+---
+
+## 📅 Dataset Usage & Preparation Instructions
+
+All datasets are managed programmatically via the ingestion tool [data/download_data.py](file:///Users/mehmetdaskaya/Documents/projects/Final-Projects/BigData/data/download_data.py). 
+
+### How to Fetch or Generate the Datasets
+Run the following script to prepare all datasets (creates local directories and files if they do not exist):
+```bash
+python data/download_data.py
+```
+
+### Dataset Inventory & Pipelines Mapping
+
+1. **Carbon Monitor (Daily Global Emissions)**
+   * **Source**: Raw CSV download from Carbon Monitor project (or simulated synthetically on failure).
+   * **Location**: `data/carbon_monitor/carbon_monitor_global.csv`
+   * **Fields**: `date`, `country`, `sector`, `MtCO2 per day`, `timestamp`.
+   * **Ecosystem Path**: Ingested by `ingestion/kafka_producer.py` -> Pushed to Kafka Topic -> Read in real-time by `processing/spark_streaming_pipeline.py` -> Saved to MongoDB collection `emissions_timeseries` for dashboard display.
+
+2. **Kaggle Individual Carbon Footprint**
+   * **Source**: Custom-designed synthetic data mimicking Kaggle lifestyle/demographic survey.
+   * **Location**: `data/kaggle_individual/individual_carbon.csv`
+   * **Fields**: `Body Type`, `Sex`, `Diet`, `Transport`, `Vehicle Type`, `Monthly Grocery Bill`, `CarbonEmission`.
+   * **Ecosystem Path**: Preprocessed and modeled with SMOTE in `ml/xgboost_model.py` for foot-print classification.
+
+3. **Kaggle Vehicle CO₂**
+   * **Source**: Synthetic vehicle emission data mimicking the Canadian Government vehicle dataset.
+   * **Location**: `data/vehicles_co2/vehicles_co2.csv`
+   * **Fields**: `Engine Size(L)`, `Cylinders`, `Transmission`, `Fuel Type`, `Fuel Consumption Comb (L/100 km)`, `CO2 Emissions(g/km)`.
+   * **Ecosystem Path**: Explored in notebooks and used to study baseline vehicle emission averages.
+
+4. **EDGAR Country-Based Annual Emissions**
+   * **Source**: Long-term annual emission summary tracking (1990-2023).
+   * **Location**: `data/edgar/edgar_country_sector_1990_2023.csv`
+   * **Fields**: `country_code`, `country_name`, `year`, `sector`, `emission_mtco2`, `per_capita_tco2`.
+   * **Ecosystem Path**: Processed by the `processing/spark_batch_pipeline.py` -> Aggregated -> Loaded to MongoDB collection `edgar_annual` and exported as Parquet format in `data/carbon_monitor/processed_parquet`.
+
+---
+
 ## 🚀 Startup & Execution Guide
 
 ### Prerequisites

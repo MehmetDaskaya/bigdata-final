@@ -1,0 +1,29 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# MLflow tracking
+# Ignore newly generated run folders under mlruns (they are long hex names)
+mlruns/*
+
+# Logs and checkpoints
+checkpoints/
+ml/training.log
+*.log
+
+# Large local datasets (downloaded/generated dynamically)
+data/carbon_monitor/*.csv
+data/kaggle_individual/*.csv
+data/vehicles_co2/*.csv
+data/edgar/*.csv
+data/carbon_monitor/processed_parquet/

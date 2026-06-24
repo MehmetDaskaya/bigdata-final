@@ -1,0 +1,135 @@
+=========================================
+SECTION 2: RELATED WORK
+=========================================
+
+SLIDE 1: Existing Approaches to Carbon Footprint Tracking
+
+- Traditional National Emissions Inventories (e.g., UNFCCC, EPA):
+  * Official greenhouse gas reporting relies on annual self-reporting by governments.
+  * Major limitation: Significant time lag (typically 18 to 24 months delay in releasing official data).
+  * Makes proactive policy intervention and immediate response to emission shocks impossible.
+
+- Satellite-based Monitoring (e.g., NASA OCO-2, Copernicus):
+  * Measure atmospheric CO2 concentrations directly.
+  * Major limitation: High operational cost, weather-dependency (cloud cover), and difficulty in attributing specific emission plumes directly to granular industrial sectors or countries.
+
+- Proxy-based Real-time Estimation:
+  * Utilizes activity indicators (electricity production logs, real-time traffic indices, flight tracking databases) to calculate daily emissions.
+  * Represents the current state-of-the-art for fast-delivery carbon monitoring.
+
+
+SLIDE 2: Similarities and Differences (Our Work vs. Existing Approaches)
+
+- Similarities:
+  * We use proxy-based daily calculations (similar to the Tsinghua University Carbon Monitor project) for our speed layer.
+  * We utilize standard international sector divisions (Power, Industry, Transport, Residential, Aviation, Shipping).
+
+- Differences & Key Innovations in Our System:
+  * Real-Time Stream Processing: Instead of batch-based website updates, we implement a true streaming speed layer using Apache Kafka and Apache Spark.
+  * End-to-End Lambda Architecture: We integrate daily stream forecasting (Speed Layer) and large-scale historical envanter analysis (Batch Layer) into a single MongoDB database.
+  * Direct Model Orchestration: We enable real-time machine learning model training (PyTorch LSTM, XGBoost) directly triggered and visualized via a web dashboard, rather than running static models offline.
+
+
+=========================================
+SECTION 3: DATASET DESCRIPTION & PREPROCESSING
+=========================================
+
+SLIDE 3: Dataset Sources & Statistics
+
+- Dataset 1: Carbon Monitor (Daily Near-Real-Time Emissions)
+  * Source: Tsinghua University & Chinese Academy of Sciences.
+  * Size: 109,200 records (10 Countries/Regions, 6 Sectors, ~5 Years of daily logs).
+  * Format: Tabular/CSV containing daily MtCO2 emissions.
+  * Purpose: Used for real-time Kafka streaming, XGBoost Regressor, and PyTorch LSTM training.
+
+- Dataset 2: EDGAR (Emissions Database for Global Atmospheric Research)
+  * Source: European Commission's Joint Research Centre.
+  * Size: 4,700+ records (Annual sector emissions from 1970 to 2023).
+  * Purpose: Training data for Spark MLlib distributed Random Forest.
+
+- Dataset 3: Individual Carbon Footprint (Lifestyle Profiles)
+  * Source: Kaggle Carbon Footprint Dataset.
+  * Size: 5,000 individual records containing 14 lifestyle features (Diet, Travel, Energy).
+  * Purpose: Training data for personal carbon classification (Low/Medium/High classes).
+
+
+SLIDE 4: Data Preprocessing & Leakage Mitigation
+
+- Preprocessing Steps:
+  * Data Cleaning: Dropped negative emission values and null country logs.
+  * Normalization: Applied MinMaxScaler for LSTM sequences and StandardScaler for Spark MLlib features.
+  * Log Transformation: Applied log1p transformation to EDGAR emissions to handle right-skewed data.
+
+- Time-Series Target Leakage Fix (Critical Methodology):
+  * Flaw: Default rolling average calculations include today's emissions, leaking the target value into features.
+  * Solution: All rolling average features (7-day, 30-day) were shifted back by 1 day (T-1) to ensure the model only uses past data.
+  * Cronological Split: Train-test split (80/20) was performed chronologically on the timeline without shuffling to prevent future data from leaking into the training set.
+
+
+SLIDE 5: Addressing Class Imbalance (SMOTE Leakage Fix)
+
+- Class Imbalance in Lifestyle Dataset:
+  * Low Emissions: 9.9%
+  * Medium Emissions: 73.6%
+  * High Emissions: 16.5%
+  
+- The SMOTE Leakage Problem:
+  * Standard SMOTE applies oversampling to the entire dataset before splitting. This creates synthetic training data seeded from future test points, inflating accuracy.
+  
+- Our Methodology:
+  * 1. Split the raw dataset first (80% Train / 20% Test).
+  * 2. Apply SMOTE (Synthetic Minority Over-sampling Technique) strictly to the training partition only.
+  * 3. Validate on a completely untampered, non-synthetic test set.
+  * Result: Achieved a clean, un-contaminated Accuracy of 85.4% and F1-score of 85.55%.
+
+
+=========================================
+SECTION 4: PROPOSED SOLUTION & SYSTEM ARCHITECTURE
+=========================================
+
+SLIDE 6: System Architecture Overview (Lambda Mimarisi)
+
+- Ingestion & Speed Layer (Real-time Stream):
+  * Carbon Monitor CSV -> Python Kafka Producer -> Kafka Topic -> Spark Structured Streaming -> MongoDB.
+  * Handles real-time daily activity messages, processes them in 10-second micro-batches, and streams updates.
+
+- Batch Layer (Distributed History):
+  * EDGAR Parquet -> Spark Batch Pipeline -> Feature Engineering -> MongoDB.
+  * Pre-processes historical envanters, calculates global baselines, and populates the serving layer.
+
+- Serving Layer & Front-end:
+  * MongoDB (Time-series collections) -> Next.js REST API -> React Tailwind Dashboard.
+  * Provides live streaming logs, projection calculators, and real-time loss tracking during model training.
+
+
+SLIDE 7: Technology Stack Breakdown
+
+- Apache Kafka:
+  * Decouples the ingestion layer from processing. Buffers streaming data on network lag, ensuring zero message loss.
+
+- Apache Spark (Structured Streaming + MLlib):
+  * Processes streaming data in parallel using micro-batches. Scalable across master and worker containers to partition and engineer large datasets.
+
+- MongoDB:
+  * Schema-less NoSQL database. Native time-series collection support optimizes timestamp queries to under 10 milliseconds.
+
+- PyTorch & XGBoost:
+  * Powering our forecasting (LSTM) and classification/regression engines. Logged via MLflow for experiment tracking.
+
+- Docker & Docker Compose:
+  * Orchestrates the 7 microservices in healthy, isolated containers (Spark Master, Spark Workers, Zookeeper, Kafka, MongoDB, Mongo Express, Web Server).
+
+
+SLIDE 8: End-to-End System Communication Flow
+
+- Step 1 (Ingestion):
+  * Python Kafka Producer broadcasts daily emission logs keyed by country and sector to guarantee ordered processing.
+
+- Step 2 (Real-time Processing):
+  * Spark Structured Streaming reads from Kafka, validates schema, applies event-time watermarking, and aggregates metrics.
+
+- Step 3 (Storage & Serving):
+  * Structured micro-batches are appended to MongoDB emissions_timeseries. Next.js fetches data via API routes.
+
+- Step 4 (Interactive Loop):
+  * When a user triggers training from the browser, Next.js spawns a Python subprocess executing train_all.py. The training process writes epoch status live to MongoDB, which the React front-end polls to update loss charts instantly.
